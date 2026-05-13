@@ -17,6 +17,17 @@
 - Explain important decisions with concrete reasons.
 - Ask before destructive or broad changes.
 
+## Sub-Agent Delegation
+
+- For non-trivial feature work, bug fixes, error investigations, and CI failures, consider using sub-agents when the work can be split into independent research, implementation, or validation scopes.
+- Use explorer sub-agents for bounded read-only questions such as tracing call sites, finding existing feature patterns, locating related tests, analyzing logs, or comparing existing conventions.
+- Use worker sub-agents only when write ownership can be clearly separated by file, module, layer, or responsibility.
+- Keep architecture, data model, API contract, permission, and UX decisions with the main agent unless the user explicitly asks for alternatives.
+- Do not delegate the immediate blocking step or design decision if the main agent needs that result before work can continue.
+- Do not create multiple agents for small, obvious, single-file fixes or single-component features.
+- When delegating code changes, tell sub-agents they are not alone in the codebase, must avoid reverting others' changes, and must report changed file paths.
+- The main agent remains responsible for integration, consistency, review, and validation.
+
 ## Safety
 
 - Treat public repository exposure as the default.
