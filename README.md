@@ -25,6 +25,7 @@ codex-harness/
 ├─ img/
 │  └─ codex-harness.png
 └─ scripts/
+   ├─ evaluate-agents.ps1
    └─ measure-agents.ps1
 ```
 
@@ -54,11 +55,46 @@ codex-harness/
 
 スコアは品質保証ではなく、情報を詰め込みすぎていないかを見るための目安です。
 
-### 3. checklistで確認する
+### 3. harness scoreを確認する
+
+`scripts/evaluate-agents.ps1` は、home-level `AGENTS.md` を「常時読み込む設定ファイル」として管理するための評価を出します。
+
+```powershell
+.\scripts\evaluate-agents.ps1 -Path .\AGENTS.md
+```
+
+このscriptは以下の観点から `0-100` の目安スコア、警告、改善提案、分類を出します。
+
+- Token Efficiency
+- Clarity
+- Actionability
+- Global Relevance
+- Duplication
+- Conflict Risk
+- Separation Fitness
+
+分類は以下の候補を出します。
+
+- Keep in global AGENTS.md
+- Move to repo AGENTS.md
+- Move to Skill
+- Merge with similar rule
+- Rewrite for clarity
+- Remove
+
+編集前後を比較する場合は `-BeforePath` と `-AfterPath` を指定します。
+
+```powershell
+.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTS.md
+```
+
+この評価は絶対的な品質判定ではありません。誤検知を許容し、`AGENTS.md` を肥大化させずに改善するための判断材料として使います。
+
+### 4. checklistで確認する
 
 `benchmarks/AGENTS.checklist.md` を使い、`AGENTS.md` が必要な運用観点を満たしているか手動で確認します。
 
-評価は `Pass / Needs Review / Fail` と短いメモで記録します。MVPでは自動採点やCodex模擬タスクによる評価は行いません。
+評価は `Pass / Needs Review / Fail` と短いメモで記録します。自動評価で警告された項目は、手動チェックで残す・移す・削る判断を確認します。
 
 ## Public Safety Notes
 
@@ -75,7 +111,7 @@ public repositoryとして公開する前に、少なくとも以下を確認し
 ## Future Ideas
 
 - `validate-agents.ps1`
-- scripted benchmarkの拡張
+- LLM reviewを併用したscripted benchmarkの拡張
 - prompt task benchmark
 - ユーザー直下 `AGENTS.md` への安全な同期script
 - GitHub Actionsでのpublic安全チェック

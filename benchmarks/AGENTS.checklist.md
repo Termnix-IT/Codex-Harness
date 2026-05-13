@@ -12,6 +12,8 @@
 - Overall status: Pass / Needs Review / Fail
 - Metrics score:
 - Metrics status:
+- Harness score:
+- Quality gate:
 
 ## Metrics
 
@@ -24,6 +26,29 @@
 数値は絶対的な品質評価ではありません。`AGENTS.md` が長くなりすぎて、重要な指示が埋もれていないかを見るための補助指標です。
 
 ユーザー直下用 `AGENTS.md` は、token消費を抑えるためEnglishで書く方針です。ただし、ユーザーへの通常応答は日本語を基本にする方針を明記します。
+
+## Harness Score
+
+次に以下を実行し、`AGENTS.md` がhome-level instructionsとして適切か確認します。
+
+```powershell
+.\scripts\evaluate-agents.ps1 -Path .\AGENTS.md
+```
+
+編集前後を比較する場合は、変更前のcopyを用意してから以下を実行します。
+
+```powershell
+.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTS.md
+```
+
+このscoreは絶対評価ではありません。特に以下の分類を見て、指示の置き場所を確認してください。
+
+- Keep in global AGENTS.md
+- Move to repo AGENTS.md
+- Move to Skill
+- Merge with similar rule
+- Rewrite for clarity
+- Remove
 
 ## Checklist
 
@@ -45,9 +70,18 @@
 | 実行commandを必要に応じて説明する方針があるか |  |  |
 | 既存のユーザー変更を勝手に戻さない方針があるか |  |  |
 | 検証できなかったことを明記する方針があるか |  |  |
+| 各ruleが全リポジトリ・全タスクで常時読む価値のあるglobal ruleか |  |  |
+| repo固有の規約・directory・生成物保存先がglobal ruleに混ざっていないか |  |  |
+| 詳細なworkflowやchecklistがSkill化候補として分離できるか |  |  |
+| 抽象的な品質表現が具体的なDo / Do not / Prefer / When ruleになっているか |  |  |
+| 意味が近いruleをmergeできる箇所がないか |  |  |
+| 互いに判断を迷わせるconflict riskがないか |  |  |
+| 追加したruleによってtoken costが増えすぎていないか |  |  |
 
 ## Notes
 
 - Strengths:
 - Needs review:
+- Separation candidates:
+- Merge candidates:
 - Recommended edits:
