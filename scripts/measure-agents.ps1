@@ -1,12 +1,12 @@
 param(
     [Parameter(Mandatory = $false)]
-    [string]$Path = "AGENTS.md"
+    [string]$Path = "AGENTSExample.md"
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    throw "AGENTS.md file does not exist: $Path"
+    throw "AGENTS example file does not exist: $Path"
 }
 
 $content = Get-Content -LiteralPath $Path -Raw
@@ -111,7 +111,7 @@ if ($score -ge 85) {
     $status = "Too Dense"
 }
 
-Write-Host "## AGENTS.md Metrics"
+Write-Host "## AGENTS Example Metrics"
 Write-Host ""
 Write-Host "- Path: $Path"
 Write-Host "- Score: $score / 100"

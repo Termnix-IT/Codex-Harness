@@ -2,7 +2,9 @@
 
 ユーザー直下の `AGENTS.md` を安全に育てるためのハーネスリポジトリです。
 
-このリポジトリは、home-level `AGENTS.md` の正本候補、手動チェックリスト、情報密度を測るmetrics scriptを管理します。プロジェクト別テンプレート配布や汎用skill管理はMVPの対象外です。
+このリポジトリは、home-level `AGENTS.md` の正本候補である `AGENTSExample.md`、手動チェックリスト、情報密度を測るmetrics scriptを管理します。プロジェクト別テンプレート配布や汎用skill管理はMVPの対象外です。
+
+このハーネスの目的は高得点を目指すことではありません。`AGENTSExample.md` や周辺運用が著しく悪化した時に気づける最低限の床を作り、低scoreや警告を改善判断の入口として使うことを目的にします。
 
 ![codex-harness overview](img/codex-harness.png)
 
@@ -10,9 +12,9 @@ MVPではユーザー直下の `AGENTS.md` を自動上書きしません。反�
 
 ## Instruction Language Policy
 
-ユーザー直下に置く想定の `AGENTS.md` は、token消費を少しでも抑えるためEnglishで記載します。
+ユーザー直下に置く想定の `AGENTS.md` の候補である `AGENTSExample.md` は、token消費を少しでも抑えるためEnglishで記載します。
 
-ただし、これはinstruction fileの記述言語の方針です。Codexのユーザーへの通常応答は、`AGENTS.md` 内で明示する通り日本語を基本にします。
+ただし、これはinstruction fileの記述言語の方針です。Codexのユーザーへの通常応答は、`AGENTSExample.md` 内で明示する通り日本語を基本にします。
 
 ## Directory Structure
 
@@ -20,27 +22,32 @@ MVPではユーザー直下の `AGENTS.md` を自動上書きしません。反�
 codex-harness/
 ├─ README.md
 ├─ AGENTS.md
+├─ AGENTSExample.md
 ├─ benchmarks/
-│  └─ AGENTS.checklist.md
+│  ├─ AGENTS.checklist.md
+│  └─ HARNESS.checklist.md
 ├─ img/
 │  └─ codex-harness.png
 └─ scripts/
    ├─ evaluate-agents.ps1
-   └─ measure-agents.ps1
+   ├─ measure-agents.ps1
+   └─ validate-harness.ps1
 ```
 
 ## Usage
 
-### 1. `AGENTS.md` を調整する
+### 1. `AGENTSExample.md` を調整する
 
-リポジトリ直下の `AGENTS.md` を、ユーザー直下に置くhome-level agent instructionsの正本候補として編集します。
+リポジトリ直下の `AGENTSExample.md` を、ユーザー直下に置くhome-level agent instructionsの正本候補として編集します。root `AGENTS.md` はこのハーネスrepo自体の作業指示として使います。
+
+実装前には、追加・変更するruleがglobal instructionsに入れるべきものか、repo `AGENTS.md` に留めるべきものか、Skillに分離すべきものかを確認します。
 
 ### 2. metricsを確認する
 
 長さや情報密度の目安を数値で確認する場合は、`scripts/measure-agents.ps1` を実行します。
 
 ```powershell
-.\scripts\measure-agents.ps1 -Path .\AGENTS.md
+.\scripts\measure-agents.ps1 -Path .\AGENTSExample.md
 ```
 
 このscriptは以下の観点から `0-100` の簡易スコアを出します。
@@ -57,10 +64,10 @@ codex-harness/
 
 ### 3. harness scoreを確認する
 
-`scripts/evaluate-agents.ps1` は、home-level `AGENTS.md` を「常時読み込む設定ファイル」として管理するための評価を出します。
+`scripts/evaluate-agents.ps1` は、home-level `AGENTS.md` の候補である `AGENTSExample.md` を「常時読み込む設定ファイル」として管理するための評価を出します。
 
 ```powershell
-.\scripts\evaluate-agents.ps1 -Path .\AGENTS.md
+.\scripts\evaluate-agents.ps1 -Path .\AGENTSExample.md
 ```
 
 このscriptは以下の観点から `0-100` の目安スコア、警告、改善提案、分類を出します。
@@ -85,16 +92,28 @@ codex-harness/
 編集前後を比較する場合は `-BeforePath` と `-AfterPath` を指定します。
 
 ```powershell
-.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTS.md
+.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTSExample.md
 ```
 
-この評価は絶対的な品質判定ではありません。誤検知を許容し、`AGENTS.md` を肥大化させずに改善するための判断材料として使います。
+この評価は絶対的な品質判定ではありません。誤検知を許容し、`AGENTSExample.md` を肥大化させずに改善するための判断材料として使います。特にscoreが低い場合や警告が増えた場合に、分離・重複・欠落を確認する警告灯として扱います。
 
 ### 4. checklistで確認する
 
-`benchmarks/AGENTS.checklist.md` を使い、`AGENTS.md` が必要な運用観点を満たしているか手動で確認します。
+`benchmarks/AGENTS.checklist.md` を使い、`AGENTSExample.md` が必要な運用観点を満たしているか手動で確認します。
 
 評価は `Pass / Needs Review / Fail` と短いメモで記録します。自動評価で警告された項目は、手動チェックで残す・移す・削る判断を確認します。
+
+### 5. harness自体を確認する
+
+`scripts/validate-harness.ps1` は、このリポジトリが最低限のハーネスとして壊れていないかを確認します。
+
+```powershell
+.\scripts\validate-harness.ps1 -Path .\AGENTSExample.md
+```
+
+このscriptは、主要ファイルの存在、READMEの説明、既存評価scriptの最低score floorを確認します。高得点を保証するものではなく、明らかな欠落や低scoreを検出するための簡易チェックです。
+
+手動では `benchmarks/HARNESS.checklist.md` を使い、README、scripts、checklists、MVP境界が互いにずれていないかを確認します。
 
 ## Public Safety Notes
 
@@ -110,7 +129,6 @@ public repositoryとして公開する前に、少なくとも以下を確認し
 
 ## Future Ideas
 
-- `validate-agents.ps1`
 - LLM reviewを併用したscripted benchmarkの拡張
 - prompt task benchmark
 - ユーザー直下 `AGENTS.md` への安全な同期script
