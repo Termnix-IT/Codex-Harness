@@ -92,7 +92,7 @@ codex-harness/
 編集前後を比較する場合は `-BeforePath` と `-AfterPath` を指定します。
 
 ```powershell
-.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTSExample.md
+.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTSExample.before.md -AfterPath .\AGENTSExample.md
 ```
 
 この評価は絶対的な品質判定ではありません。誤検知を許容し、`AGENTSExample.md` を肥大化させずに改善するための判断材料として使います。特にscoreが低い場合や警告が増えた場合に、分離・重複・欠落を確認する警告灯として扱います。

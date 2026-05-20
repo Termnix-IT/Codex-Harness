@@ -151,7 +151,7 @@ function Get-AgentsEvaluation {
     param([string]$TargetPath)
 
     if (-not (Test-Path -LiteralPath $TargetPath -PathType Leaf)) {
-        throw "AGENTS example file does not exist: $TargetPath"
+        throw "AGENTS file does not exist: $TargetPath"
     }
 
     $content = Get-Content -LiteralPath $TargetPath -Raw
@@ -375,7 +375,7 @@ function Write-ListSection {
 function Write-Evaluation {
     param([object]$Evaluation)
 
-    Write-Host "## AGENTS Example Harness Score"
+    Write-Host "## AGENTS Harness Score"
     Write-Host ""
     Write-Host "- Path: $($Evaluation.Path)"
     Write-Host "- Overall: $($Evaluation.Overall) / 100"
@@ -442,7 +442,7 @@ function Write-DiffEvaluation {
         [object]$After
     )
 
-    Write-Host "## AGENTS Example Diff Evaluation"
+    Write-Host "## AGENTS Diff Evaluation"
     Write-Host ""
     Write-Host "- Before: $($Before.Overall) / 100 ($($Before.QualityGate))"
     Write-Host "- After: $($After.Overall) / 100 ($($After.QualityGate))"

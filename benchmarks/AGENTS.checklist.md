@@ -38,7 +38,7 @@
 編集前後を比較する場合は、変更前のcopyを用意してから以下を実行します。
 
 ```powershell
-.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTS.before.md -AfterPath .\AGENTSExample.md
+.\scripts\evaluate-agents.ps1 -BeforePath .\AGENTSExample.before.md -AfterPath .\AGENTSExample.md
 ```
 
 このscoreは絶対評価ではありません。特に以下の分類を見て、指示の置き場所を確認してください。

@@ -94,7 +94,7 @@ foreach ($check in $readmeChecks) {
 }
 
 if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    Add-CheckResult -Results $results -Name "Target AGENTS example exists" -Passed $false -Message "missing: $Path"
+    Add-CheckResult -Results $results -Name "Target AGENTS file exists" -Passed $false -Message "missing: $Path"
 } elseif (-not $SkipScriptRuns) {
     $measureOutput = Invoke-ValidationScript -ScriptPath ".\scripts\measure-agents.ps1" -TargetPath $Path
     $metricsScore = Get-ScoreFromOutput -Output $measureOutput -Pattern '^- Score:\s+(\d+)\s+/'

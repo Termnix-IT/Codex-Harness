@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    throw "AGENTS example file does not exist: $Path"
+    throw "AGENTS file does not exist: $Path"
 }
 
 $content = Get-Content -LiteralPath $Path -Raw
@@ -111,7 +111,7 @@ if ($score -ge 85) {
     $status = "Too Dense"
 }
 
-Write-Host "## AGENTS Example Metrics"
+Write-Host "## AGENTS Metrics"
 Write-Host ""
 Write-Host "- Path: $Path"
 Write-Host "- Score: $score / 100"
