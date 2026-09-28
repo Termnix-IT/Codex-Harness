@@ -98,7 +98,7 @@ try {
     Assert-True ($scoped.AutonomyRisks.Count -eq 0) 'Scoped approval and testing rules are not unconditional restrictions.'
     Assert-True ($scoped.Scores.'Autonomy Calibration' -eq 10) 'Scoped rules retain the autonomy score.'
     Assert-True ($scoped.Profile.TargetModel -eq 'gpt-6-sol') 'JSON reports include the actual target profile.'
-    Assert-True ($scoped.RubricVersion -eq '2026-09-gpt6') 'JSON reports identify their rubric.'
+    Assert-True ($scoped.RubricVersion -eq '2026-09-gpt6-ja') 'JSON reports identify their rubric.'
     $qualifiedPath = Write-Fixture 'qualified.txt' "- Always ask before force pushing.`n- Always run affected tests.`n- Always delegate when independent work would save time."
     $qualified = Invoke-Evaluation $qualifiedPath $freshPath
     Assert-True ($qualified.AutonomyRisks.Count -eq 0) 'Explicit operation boundaries and conditional rules are not blanket restrictions.'
@@ -132,6 +132,38 @@ try {
     Assert-True ($japanese.Metrics.JapaneseCharacterRatio -gt 30) 'Japanese character ratio remains visible.'
     Assert-True ($japanese.Scores.'Context Economy' -eq 15) 'Language ratio alone does not reduce context economy.'
     Assert-True ($japanese.Metrics.ActionableBulletItems -eq 1) 'Japanese action wording is recognized.'
+    $japaneseUnconditionalPath = Write-Fixture 'japanese-unconditional.txt' @'
+- 毎回の編集前にユーザーに確認する。
+- 編集前にREADMEと構成全体を読む。
+- 常に全テストを実行する。
+- 必ずサブエージェントに委譲する。
+- ユーザーから明示的に依頼されない限り、stage、commit、pushを行わない。
+'@
+    $japaneseUnconditional = Invoke-Evaluation $japaneseUnconditionalPath $freshPath
+    Assert-True ($japaneseUnconditional.AutonomyRisks.Count -eq 5) 'Japanese unconditional workflow restrictions are detected.'
+    $japaneseScopedPath = Write-Fixture 'japanese-scoped.txt' @'
+- 必ず破壊的な操作の前にユーザーに確認する。
+- 常に関連するテストを実行する。
+- 独立した作業に分けられる場合にサブエージェントを使用する。
+- 承認済みの範囲は再確認しない。
+- 公開やリリースを発生させないことを確認できた場合にpushする。
+'@
+    $japaneseScoped = Invoke-Evaluation $japaneseScopedPath $freshPath
+    Assert-True ($japaneseScoped.AutonomyRisks.Count -eq 0 -and $japaneseScoped.SkillHits.Count -eq 0) 'Japanese scoped approvals, tests, delegation, and release boundaries are not blanket restrictions or workflows.'
+    $japaneseClassificationsPath = Write-Fixture 'japanese-classifications.txt' "- いい感じに品質を上げる。`n- このリポジトリでは専用のコマンドを実行する。`n- デバッグの手順書を毎回作成する。"
+    $japaneseClassifications = Invoke-Evaluation $japaneseClassificationsPath $freshPath
+    Assert-True ($japaneseClassifications.VagueHits.Count -eq 1) 'Japanese vague wording is detected.'
+    Assert-True ($japaneseClassifications.RepoHits.Count -eq 1) 'Japanese repository-specific rules are detected.'
+    Assert-True ($japaneseClassifications.SkillHits.Count -eq 1) 'Japanese procedural instructions are detected.'
+    $japaneseConflictPath = Write-Fixture 'japanese-conflict.txt' "- 常にユーザーに確認する。`n- 不足情報には仮定を置いて進める。"
+    $japaneseConflict = Invoke-Evaluation $japaneseConflictPath $freshPath
+    Assert-True ($japaneseConflict.ConflictRisks.Count -eq 1) 'Japanese conflicting guidance is flagged for review.'
+    $japaneseDuplicatePath = Write-Fixture 'japanese-duplicate.txt' "- 既存の変更を保持する。`n-  既存の変更を保持する"
+    $japaneseDuplicate = Invoke-Evaluation $japaneseDuplicatePath $freshPath
+    Assert-True ($japaneseDuplicate.DuplicationGroups.Count -eq 1) 'Japanese duplicates normalize their final punctuation.'
+    $candidate = Invoke-Evaluation (Join-Path $repoRoot 'AGENTSExample.md') $freshPath
+    Assert-True ($candidate.Classification.Keep.Count -gt 0 -and $candidate.Metrics.ActionableBulletItems -ge 40) 'The Japanese candidate retains actionable wording and global classifications.'
+    Assert-True ($candidate.AutonomyRisks.Count -eq 0 -and $candidate.RepoHits.Count -eq 0) 'Translation does not turn scoped candidate guidance into unconditional or repo-specific rules.'
     $longPath = Write-Fixture 'long-line.txt' ('- Keep the authorization boundary explicit. ' + ('Additional context about approved operations. ' * 4))
     $long = Invoke-Evaluation $longPath $freshPath
     Assert-True ($long.Metrics.LongLines -eq 1) 'Long lines remain visible.'

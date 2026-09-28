@@ -108,23 +108,23 @@ function Get-ConflictRisks {
     $pairs = @(
         @{
             Name = "Detailed explanations vs concise responses"
-            A = '(?i)\b(always|must)\b.*\b(detail|detailed|explain everything|comprehensive)\b'
-            B = '(?i)\b(concise|brief|short|minimal response)\b'
+            A = '(?i)\b(always|must)\b.*\b(detail|detailed|explain everything|comprehensive)\b|(?:必ず|常に).*(?:詳細に|詳しく|全て説明)'
+            B = '(?i)\b(concise|brief|short|minimal response)\b|簡潔|短く|短い'
         },
         @{
             Name = "Always ask vs make reasonable assumptions"
-            A = '(?i)\b(always|must)\b.*\b(ask|confirm)\b'
-            B = '(?i)\b(assume|reasonable assumption|choose the safest|minimal action)\b'
+            A = '(?i)\b(always|must)\b.*\b(ask|confirm)\b|(?:必ず|常に|毎回).*(?:ユーザー[にへ]確認|承認を求め|許可を求め)'
+            B = '(?i)\b(assume|reasonable assumption|choose the safest|minimal action)\b|仮定|推測'
         },
         @{
             Name = "Never edit vs automatic fixes"
-            A = '(?i)\b(never|do not)\b.*\b(edit|modify|change)\b'
-            B = '(?i)\b(auto|automatic|automatically)\b.*\b(fix|update|rewrite|modify)\b'
+            A = '(?i)\b(never|do not)\b.*\b(edit|modify|change)\b|変更しない|編集しない|変更禁止'
+            B = '(?i)\b(auto|automatic|automatically)\b.*\b(fix|update|rewrite|modify)\b|自動.*(?:修正|更新|変更)'
         },
         @{
             Name = "Always run tests vs when feasible"
-            A = '(?i)\b(always|must)\b.*\b(run tests|test)\b'
-            B = '(?i)\b(when feasible|if feasible|cannot be run)\b'
+            A = '(?i)\b(always|must)\b.*\b(run tests|test)\b|(?:必ず|常に|毎回).*(?:テスト|検証).*(?:実行|行う)'
+            B = '(?i)\b(when feasible|if feasible|cannot be run)\b|実行できない|可能な場合'
         }
     )
 
@@ -141,19 +141,19 @@ function Get-AutonomyRisks {
     param([string[]]$Items)
 
     $rules = @(
-        @{ Name = 'unconditional approval'; Pattern = '(?i)^(always\s+(ask|confirm)|before\s+(every|any)\s+(action|change|edit).*(ask|confirm))\b'; Recommendation = 'Define approval boundaries and reuse existing authorization' },
-        @{ Name = 'unconditional context loading'; Pattern = '(?i)^before\s+(changing files|(every|any)\s+(edit|change)).*\b(read|inspect|review)\b'; Recommendation = 'Read relevant context and reuse confirmed findings' },
-        @{ Name = 'unconditional full testing'; Pattern = '(?i)^always\s+(run|execute)\b.*\b(test|tests|suite)\b'; Recommendation = 'Calibrate validation to the change and required checks' },
-        @{ Name = 'unconditional delegation'; Pattern = '(?i)^always\b.*\b(delegate|sub-agents?|subagents?)\b'; Recommendation = 'Delegate independent bounded work when worthwhile' },
-        @{ Name = 'unconditional Git approval'; Pattern = '(?i)\bdo not stage, commit, or push unless the user explicitly asks\b'; Recommendation = 'Express the approved commit and push conditions' }
+        @{ Name = 'unconditional approval'; Pattern = '(?i)^(always\s+(ask|confirm)|before\s+(every|any)\s+(action|change|edit).*(ask|confirm))\b|^(?:常に|毎回|必ず).*(?:ユーザー[にへ]確認|承認を求め|許可を求め)'; Recommendation = 'Define approval boundaries and reuse existing authorization' },
+        @{ Name = 'unconditional context loading'; Pattern = '(?i)^before\s+(changing files|(every|any)\s+(edit|change)).*\b(read|inspect|review)\b|^(?:毎回|常に)?(?:ファイル|コード)?を?(?:変更|編集)(?:する)?(?:前|の前|するたび).*(?:読む|調べる|確認する)'; Recommendation = 'Read relevant context and reuse confirmed findings' },
+        @{ Name = 'unconditional full testing'; Pattern = '(?i)^always\s+(run|execute)\b.*\b(test|tests|suite)\b|^(?:毎回|常に|必ず).*テスト.*(?:実行|行う)'; Recommendation = 'Calibrate validation to the change and required checks' },
+        @{ Name = 'unconditional delegation'; Pattern = '(?i)^always\b.*\b(delegate|sub-agents?|subagents?)\b|^(?:毎回|常に|必ず).*(?:委譲|サブエージェント|複数のエージェント)'; Recommendation = 'Delegate independent bounded work when worthwhile' },
+        @{ Name = 'unconditional Git approval'; Pattern = '(?i)\bdo not stage, commit, or push unless the user explicitly asks\b|明示.*(?:依頼|指示|承認).*stage.*commit.*push.*(?:行わない|しない)'; Recommendation = 'Express the approved commit and push conditions' }
     )
     $hits = @(Get-RuleHits -Items $Items -Rules $rules)
     return @($hits | Where-Object {
-        if ($_.Name -ne 'unconditional Git approval' -and $_.Text -match '(?i)\b(when|if|unless)\b') { return $false }
+        if ($_.Name -ne 'unconditional Git approval' -and $_.Text -match '(?i)\b(when|if|unless)\b|場合|とき|承認済み|必要なら') { return $false }
         if ($_.Name -eq 'unconditional approval' -and
-            $_.Text -match '(?i)\b(before|for)\b.*\b(destructive|force|shared|protected|default|main|deploy|deployment|publication|release|delete|deleting|amend|rewriting|outside|beyond)\b') { return $false }
+            $_.Text -match '(?i)\b(before|for)\b.*\b(destructive|force|shared|protected|default|main|deploy|deployment|publication|release|delete|deleting|amend|rewriting|outside|beyond)\b|破壊的|共有|保護|デフォルト|デプロイ|公開|リリース|削除|書き換え|承認範囲(?:外|を超)') { return $false }
         if ($_.Name -eq 'unconditional full testing' -and
-            $_.Text -match '(?i)\b(affected|relevant|appropriate|required)\b') { return $false }
+            $_.Text -match '(?i)\b(affected|relevant|appropriate|required)\b|影響範囲|関連|必要な|適切な') { return $false }
         return $true
     })
 }
@@ -185,20 +185,20 @@ function Get-AgentsEvaluation {
 
     $actionWords = @($bullets | Where-Object {
         $_ -match '^(?i)(Do not|Do|Prefer|Before|After|When|Ask|State|Run|Use|Keep|Treat|Write|Switch|Add|Make|Explain|Separate|Read|Complete|Stage|Push|Report|Unless|Follow)\b' -or
-        $_ -match '(する|しない|ください|保つ|使う|従う)[。.]?$'
+        $_ -match '(する|しない|ください|保つ|使う|従う|読む|加える|まとめる|広げる|進める|扱わない|任せる|伝える|持つ|移す|戻さない|含めない)[。.]?$'
     })
 
     $vagueRules = @(
-        @{ Name = "vague quality wording"; Pattern = '(?i)\b(make it better|be careful|improve quality|do it nicely|good quality|as appropriate|where possible|best effort)\b'; Recommendation = "Rewrite for clarity" }
+        @{ Name = "vague quality wording"; Pattern = '(?i)\b(make it better|be careful|improve quality|do it nicely|good quality|as appropriate|where possible|best effort)\b|いい感じに|気をつける|品質を上げる|可能な限り'; Recommendation = "Rewrite for clarity" }
     )
     $taskSpecificRules = @(
-        @{ Name = "task-specific or artifact-specific wording"; Pattern = '(?i)\b(portfolio|network diagram|diagram\.svg|outputs/|screenshots/|release checklist|README maintenance|UI review|specific section structure)\b'; Recommendation = "Move to Skill or repo AGENTS.md" }
+        @{ Name = "task-specific or artifact-specific wording"; Pattern = '(?i)\b(portfolio|network diagram|diagram\.svg|outputs/|screenshots/|release checklist|README maintenance|UI review|specific section structure)\b|ポートフォリオ|ネットワーク図|リリースチェックリスト|READMEの保守|UIレビュー'; Recommendation = "Move to Skill or repo AGENTS.md" }
     )
     $skillRules = @(
-        @{ Name = "workflow-like instruction"; Pattern = '(?i)\b(checklist|step-by-step|debugging flow|UI review|diagram generation|maintenance workflow)\b'; Recommendation = "Move to Skill" }
+        @{ Name = "workflow-like instruction"; Pattern = '(?i)\b(checklist|step-by-step|debugging flow|UI review|diagram generation|maintenance workflow)\b|チェックリスト|手順書|デバッグの手順|図の生成手順|保守手順|UIレビュー'; Recommendation = "Move to Skill" }
     )
     $repoRules = @(
-        @{ Name = "repository-specific instruction"; Pattern = '(?i)\b(this repository|repo-specific|project structure|directory structure|templates/|skills/|benchmarks/|scripts/|outputs/|source candidate)\b'; Recommendation = "Move to repo AGENTS.md" }
+        @{ Name = "repository-specific instruction"; Pattern = '(?i)\b(this repository|repo-specific|project structure|directory structure|templates/|skills/|benchmarks/|scripts/|outputs/|source candidate)\b|^(?:このリポジトリ|このプロジェクト)(?:では|は|を)|^プロジェクト(?:の|専用の)(?:構成|コマンド)'; Recommendation = "Move to repo AGENTS.md" }
     )
 
     $vagueHits = Get-RuleHits -Items $bullets -Rules $vagueRules
@@ -311,7 +311,7 @@ function Get-AgentsEvaluation {
     $remove = New-StringList
 
     foreach ($item in $bullets) {
-        if ($item -match '(?i)\b(language|Japanese|English|technical identifiers|secret|token|password|destructive|small|focused|diff|assumption|validation)\b') {
+        if ($item -match '(?i)\b(language|Japanese|English|technical identifiers|secret|token|password|destructive|small|focused|diff|assumption|validation)\b|日本語|使用言語|識別子|機密|破壊的|差分|仮定|検証|承認') {
             Add-Unique -List $keep -Value $item
         }
     }
@@ -333,7 +333,7 @@ function Get-AgentsEvaluation {
 
     return [pscustomobject]@{
         Path = $TargetPath
-        RubricVersion = '2026-09-gpt6'
+        RubricVersion = '2026-09-gpt6-ja'
         Profile = $modelProfile
         Overall = [int]$overall
         QualityGate = $(if ($modelProfile.IsCurrent) { Get-QualityGate -Score $overall } else { 'Review due' })
