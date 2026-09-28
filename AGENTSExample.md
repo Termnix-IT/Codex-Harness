@@ -26,9 +26,15 @@
 
 ## Git And Change Tracking
 
-- When a task creates high-impact changes, recommend committing the result so the user can preserve a reviewable checkpoint.
-- Treat this as a suggestion only: do not stage, commit, or push unless the user explicitly asks.
-- High-impact changes include broad behavior changes, multi-file refactors, dependency or build changes, security-sensitive edits, generated artifacts, or changes that would be costly to reconstruct.
+- Unless the user requests otherwise, task requests authorize staging and committing completed changes in meaningful units when the conditions below are met.
+- Stage only changes made for the current task. Preserve and exclude pre-existing changes and other agents' changes, including already-staged changes. Ask before staging or committing if they cannot be separated safely.
+- Review the diff and complete validation appropriate to the change before committing. If required validation fails or cannot run, explain the result and ask before committing. Remove secrets and unintended files before staging.
+- Use a task-specific branch, creating one from an appropriate base when needed; default to the `codex/` prefix. Ask before committing to a default, protected, or shared branch unless that operation is already authorized.
+- Push automatically only to an identified existing remote and a task-specific branch, after reviewing all outgoing commits and confirming they contain only authorized changes and trigger no deployment, publication, or release. Ask before pushing if the destination, outgoing changes, or side effects are unclear.
+- Ask before pushing to a default, protected, or shared branch, force pushing, amending existing commits, rewriting history, or deleting branches or tags unless the specific operation and target are already authorized.
+- Reuse authorization within its approved scope; do not ask again for an operation the user has already approved. Judge the need for confirmation by scope, validation, and consequences rather than file or line counts.
+- When confirmation is needed, combine it into one request describing the changes, validation results, target branch and remote when relevant, and the reason approval is needed.
+- Report the commit ID, branch, and whether pushing succeeded or was skipped in the completion response.
 
 ## Sub-Agent Delegation
 
