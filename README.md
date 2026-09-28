@@ -55,6 +55,8 @@ codex-harness/
 
 実装前には、追加・変更するruleがglobal instructionsに入れるべきものか、repo `AGENTS.md` に留めるべきものか、Skillに分離すべきものかを確認します。
 
+ダッシュボード記録ルールの `<dashboard-cli-path>` は、公開用のプレースホルダーです。ユーザー直下へ反映するときは、そのPCで設定済みの `state_cli.py` のパスに置き換えます。反映済みファイルにあるPC固有のパスを保持し、実パスをこのリポジトリへ取り込まないでください。
+
 ### 2. metricsを確認する
 
 長さや情報密度の目安を数値で確認する場合は、`scripts/measure-agents.ps1` を実行します。
