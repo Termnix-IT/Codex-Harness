@@ -12,6 +12,10 @@
 - Harness validation result:
 - Metrics score:
 - Harness score:
+- Target model / reasoning effort:
+- Official guidance review status:
+- Rubric version:
+- Behavior evaluation result: Not run / Pass / Needs Review / Fail
 
 ## Automated Checks
 
@@ -21,7 +25,7 @@
 .\scripts\validate-harness.ps1 -Path .\AGENTSExample.md
 ```
 
-このscriptは、主要ファイルの存在、READMEの説明、既存評価scriptの最低score floorを確認します。
+このscriptは、主要ファイルの存在、READMEの説明、model profileの有効性と確認期限、既存評価scriptの正常終了と最低score floorを確認します。
 
 必要に応じてfloorを変更して確認します。
 
@@ -41,9 +45,15 @@
 | `scripts/measure-agents.ps1` が過密化やcoverage不足を検出できるか |  |  |
 | `scripts/evaluate-agents.ps1` がglobal / repo / skillの分離崩れを検出できるか |  |  |
 | `scripts/validate-harness.ps1` が主要ファイル欠落や明らかな低scoreを検出できるか |  |  |
+| `benchmarks/model-profile.json` が対象モデル、reasoning effort、公式資料の根拠範囲と確認日を記録しているか |  |  |
+| モデル変更や確認期限到達時に、日付だけを変更せず公式資料と評価前提を見直すか |  |  |
+| Astraで観測された特性をSolの実測結果と混同していないか |  |  |
+| 静的scoreと行動評価を分け、未実施ケースを `Not run` として扱うか |  |  |
+| 回帰テストが条件付きGitルールの誤検知、確認期限、不正profile、重複検出を確認するか |  |  |
 | READMEのDirectory Structureが実ファイルと概ね一致しているか |  |  |
 | READMEのUsageが現在のscriptとchecklistに追従しているか |  |  |
 | 自動scoreを絶対的な品質判定として扱わない注意が書かれているか |  |  |
+| 評価基準のversion変更前後のscoreを直接比較しない方針があるか |  |  |
 | public repository前提の安全確認が残っているか |  |  |
 | ユーザー直下 `AGENTS.md` を自動上書きしないMVP境界が残っているか |  |  |
 

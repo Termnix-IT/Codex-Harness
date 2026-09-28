@@ -1,21 +1,24 @@
 # AGENTS.md
 
-## Repository Role
+## リポジトリの役割
 
-- Use this repository as a harness for safely editing and validating global Codex instructions.
-- Treat `AGENTSExample.md` as the source candidate for the user's global `AGENTS.md`.
-- Keep this file limited to repository-specific workflow notes so it does not duplicate global instruction content.
-- Do not automatically overwrite `C:\Users\lugep\.codex\AGENTS.md`; reflect only user-approved changes.
+- このリポジトリを、グローバルなCodex指示を安全に編集・検証するためのハーネスとして使用する。
+- `AGENTSExample.md`を、ユーザー直下のグローバル`AGENTS.md`の正本候補として扱う。
+- このファイルはリポジトリ固有の作業指示に限定し、グローバル指示の内容を重複して記載しない。
+- `C:\Users\lugep\.codex\AGENTS.md`を自動で上書きせず、ユーザーが承認した変更だけを反映する。
 
-## Workflow
+## 作業の進め方
 
-- Before changing `AGENTSExample.md`, inspect whether the requested rule belongs in global instructions, this repo's `AGENTS.md`, or a Skill.
-- For non-trivial instruction changes, research the intended behavior and likely side effects before implementing.
-- Update README, checklists, and scripts when the target example file name or validation workflow changes.
-- Keep diffs small and preserve unrelated user-owned changes.
+- `AGENTSExample.md`の変更前に、そのルールをグローバル指示、このリポジトリの`AGENTS.md`、Skillのどこへ置くべきか確認する。
+- 単純な文言修正を超える指示の変更では、意図する動作と想定される副作用を調査してから実装する。
+- モデルと公式資料の確認記録には`benchmarks/model-profile.json`を使用する。モデル変更時や確認期限到達時は根拠資料を再確認し、内容を確認せず日付だけを更新しない。
+- 静的なルール評価とモデルの行動評価を区別する。実行していない行動評価ケースは`Not run`と記録する。
+- 候補ファイル名や検証手順を変更した場合は、README、チェックリスト、スクリプトも更新する。
+- 差分を小さく保ち、今回の作業と無関係なユーザーの変更を保持する。
 
-## Validation
+## 検証
 
-- Run `.\scripts\measure-agents.ps1 -Path .\AGENTSExample.md` after changing the global instruction candidate.
-- Run `.\scripts\evaluate-agents.ps1 -Path .\AGENTSExample.md` after changing rule content or separation guidance.
-- Run `.\scripts\validate-harness.ps1 -Path .\AGENTSExample.md` after changing harness structure, scripts, or required files.
+- グローバル指示の候補を変更した場合は、`.\scripts\measure-agents.ps1 -Path .\AGENTSExample.md`を実行する。
+- ルールの内容や分離方針を変更した場合は、`.\scripts\evaluate-agents.ps1 -Path .\AGENTSExample.md`を実行する。
+- ハーネスの構成、スクリプト、必須ファイルを変更した場合は、`.\scripts\validate-harness.ps1 -Path .\AGENTSExample.md`を実行する。
+- 評価スクリプトやmodel profileの検証処理を変更した場合は、`.\scripts\test-harness.ps1`を実行する。
