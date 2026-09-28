@@ -1,6 +1,6 @@
-param(
+﻿param(
     [Parameter(Mandatory = $false)]
-    [string]$Path = "AGENTSExample.md"
+    [string]$Path = (Join-Path (Split-Path $PSScriptRoot -Parent) 'AGENTSExample.md')
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +9,10 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "AGENTS file does not exist: $Path"
 }
 
-$content = Get-Content -LiteralPath $Path -Raw
+$content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+if ([string]::IsNullOrWhiteSpace($content)) {
+    throw "AGENTS file is empty: $Path"
+}
 $lines = @($content -split "`r?`n")
 $nonEmptyLines = @($lines | Where-Object { $_.Trim().Length -gt 0 })
 $sections = @($lines | Where-Object { $_ -match '^##\s+' })
@@ -17,6 +20,7 @@ $bullets = @($lines | Where-Object { $_ -match '^\s*-\s+' })
 $longLines = @($lines | Where-Object { $_.Length -gt 140 })
 
 $charCount = $content.Length
+$utf8Bytes = [System.Text.Encoding]::UTF8.GetByteCount($content)
 $japaneseCharCount = ([regex]::Matches($content, '[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]')).Count
 if ($charCount -gt 0) {
     $japaneseCharRatio = [Math]::Round(($japaneseCharCount / $charCount) * 100, 1)
@@ -31,10 +35,7 @@ $longLineCount = $longLines.Count
 $score = 100
 $notes = New-Object System.Collections.Generic.List[string]
 
-if ($lineCount -lt 20) {
-    $score -= 20
-    $notes.Add("Too short: fewer than 20 non-empty lines.")
-} elseif ($lineCount -gt 120) {
+if ($lineCount -gt 120) {
     $score -= [Math]::Min(30, ($lineCount - 120))
     $notes.Add("Long file: more than 120 non-empty lines.")
 } elseif ($lineCount -gt 80) {
@@ -50,10 +51,7 @@ if ($charCount -gt 12000) {
     $notes.Add("Moderate character count: more than 8000 characters.")
 }
 
-if ($sectionCount -lt 3) {
-    $score -= 10
-    $notes.Add("Few sections: fewer than 3 second-level sections.")
-} elseif ($sectionCount -gt 10) {
+if ($sectionCount -gt 10) {
     $score -= 10
     $notes.Add("Many sections: more than 10 second-level sections.")
 }
@@ -66,28 +64,20 @@ if ($bulletCount -gt 60) {
     $notes.Add("Moderately many bullets: more than 40 bullet items.")
 }
 
-if ($longLineCount -gt 0) {
-    $score -= [Math]::Min(10, $longLineCount * 2)
-    $notes.Add("Long lines: $longLineCount line(s) exceed 140 characters.")
-}
-
-if ($japaneseCharRatio -gt 30) {
-    $score -= 15
-    $notes.Add("High Japanese character ratio: $japaneseCharRatio%. Home-level AGENTS.md should be English-first for token efficiency.")
-} elseif ($japaneseCharRatio -gt 10) {
-    $score -= 5
-    $notes.Add("Moderate Japanese character ratio: $japaneseCharRatio%. Check whether English wording would be more token-efficient.")
+if ($utf8Bytes -gt 32768) {
+    $notes.Add("Exceeds the documented default 32 KiB combined instruction discovery budget; check project_doc_max_bytes and other loaded instructions.")
 }
 
 $coverageChecks = @(
-    @{ Name = "English instruction source policy"; Pattern = "English.*token|token.*English" },
     @{ Name = "Japanese response policy"; Pattern = "日本語|Japanese" },
     @{ Name = "Safety / destructive changes"; Pattern = "破壊的|destructive" },
     @{ Name = "Existing structure priority"; Pattern = "既存|existing" },
     @{ Name = "Small diff guidance"; Pattern = "diff|差分|小さ" },
     @{ Name = "Secrets / public repository"; Pattern = "secret|token|API key|public repository|機密" },
     @{ Name = "PowerShell / Windows"; Pattern = "PowerShell|Windows" },
-    @{ Name = "Uncertainty handling"; Pattern = "不確実|推測|assumption" }
+    @{ Name = "Uncertainty handling"; Pattern = "不確実|推測|assumption" },
+    @{ Name = "Authorization boundary"; Pattern = "authoriz|承認|確認" },
+    @{ Name = "Proportionate validation"; Pattern = "validation|検証|テスト" }
 )
 
 $missingCoverage = New-Object System.Collections.Generic.List[string]
@@ -108,7 +98,7 @@ if ($score -ge 85) {
 } elseif ($score -ge 70) {
     $status = "Needs Review"
 } else {
-    $status = "Too Dense"
+    $status = "Needs revision"
 }
 
 Write-Host "## AGENTS Metrics"
@@ -118,6 +108,8 @@ Write-Host "- Score: $score / 100"
 Write-Host "- Status: $status"
 Write-Host "- Non-empty lines: $lineCount"
 Write-Host "- Characters: $charCount"
+Write-Host "- UTF-8 bytes: $utf8Bytes"
+Write-Host "- Measurement: text density proxy; no model token count or behavior evaluation"
 Write-Host "- Japanese character ratio: $japaneseCharRatio%"
 Write-Host "- Sections: $sectionCount"
 Write-Host "- Bullet items: $bulletCount"

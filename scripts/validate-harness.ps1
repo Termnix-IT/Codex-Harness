@@ -1,6 +1,8 @@
-param(
+﻿param(
     [Parameter(Mandatory = $false)]
-    [string]$Path = "AGENTSExample.md",
+    [string]$Path = (Join-Path (Split-Path $PSScriptRoot -Parent) 'AGENTSExample.md'),
+
+    [string]$ProfilePath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'benchmarks/model-profile.json'),
 
     [Parameter(Mandatory = $false)]
     [int]$MinimumMetricsScore = 70,
@@ -13,6 +15,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'harness-profile.ps1')
 
 function New-StringList {
     return New-Object System.Collections.Generic.List[string]
@@ -51,11 +55,21 @@ function Get-ScoreFromOutput {
 function Invoke-ValidationScript {
     param(
         [string]$ScriptPath,
-        [string]$TargetPath
+        [string]$TargetPath,
+        [string]$ModelProfilePath
     )
 
     $powerShellExe = (Get-Process -Id $PID).Path
-    return & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath -Path $TargetPath 2>&1
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath, '-Path', $TargetPath)
+    if ($ModelProfilePath) { $arguments += @('-ProfilePath', $ModelProfilePath) }
+    $savedPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $powerShellExe @arguments 2>&1 | ForEach-Object { [string]$_ })
+        return [pscustomobject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+    } finally {
+        $ErrorActionPreference = $savedPreference
+    }
 }
 
 $results = New-Object System.Collections.Generic.List[object]
@@ -66,26 +80,31 @@ $requiredFiles = @(
     "AGENTSExample.md",
     "benchmarks/AGENTS.checklist.md",
     "benchmarks/HARNESS.checklist.md",
+    "benchmarks/model-profile.json",
     "scripts/evaluate-agents.ps1",
+    "scripts/harness-profile.ps1",
     "scripts/measure-agents.ps1",
-    "scripts/validate-harness.ps1"
+    "scripts/validate-harness.ps1",
+    "scripts/test-harness.ps1"
 )
 
 foreach ($file in $requiredFiles) {
-    $exists = Test-Path -LiteralPath $file -PathType Leaf
+    $exists = Test-Path -LiteralPath (Join-Path $repoRoot $file) -PathType Leaf
     Add-CheckResult -Results $results -Name "Required file: $file" -Passed $exists -Message $(if ($exists) { "found" } else { "missing" })
 }
 
 $readmeContent = ""
-if (Test-Path -LiteralPath "README.md" -PathType Leaf) {
-    $readmeContent = Get-Content -LiteralPath "README.md" -Raw
+if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md') -PathType Leaf) {
+    $readmeContent = Get-Content -LiteralPath (Join-Path $repoRoot 'README.md') -Raw -Encoding UTF8
 }
 
 $readmeChecks = @(
     @{ Name = "README explains floor-check purpose"; Pattern = "最低限|floor|warning light|警告" },
     @{ Name = "README documents validate-harness.ps1"; Pattern = "validate-harness\.ps1" },
     @{ Name = "README documents HARNESS checklist"; Pattern = "HARNESS\.checklist\.md" },
-    @{ Name = "README keeps manual review expectation"; Pattern = "手動|manual" }
+    @{ Name = "README keeps manual review expectation"; Pattern = "手動|manual" },
+    @{ Name = "README documents model profile"; Pattern = "model-profile\.json" },
+    @{ Name = "README distinguishes static and behavior evaluation"; Pattern = "行動評価" }
 )
 
 foreach ($check in $readmeChecks) {
@@ -93,17 +112,24 @@ foreach ($check in $readmeChecks) {
     Add-CheckResult -Results $results -Name $check.Name -Passed $passed -Message $(if ($passed) { "covered" } else { "not covered" })
 }
 
+try {
+    $profile = Get-HarnessProfile -ProfilePath $ProfilePath
+    Add-CheckResult -Results $results -Name 'Official guidance freshness' -Passed $profile.IsCurrent -Message "$($profile.TargetModel), reviewed: $($profile.ReviewedOn), age: $($profile.AgeDays) days, interval: $($profile.ReviewIntervalDays) days"
+} catch {
+    Add-CheckResult -Results $results -Name 'Model profile validity' -Passed $false -Message $_.Exception.Message
+}
+
 if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     Add-CheckResult -Results $results -Name "Target AGENTS file exists" -Passed $false -Message "missing: $Path"
 } elseif (-not $SkipScriptRuns) {
-    $measureOutput = Invoke-ValidationScript -ScriptPath ".\scripts\measure-agents.ps1" -TargetPath $Path
-    $metricsScore = Get-ScoreFromOutput -Output $measureOutput -Pattern '^- Score:\s+(\d+)\s+/'
-    $metricsPassed = $null -ne $metricsScore -and $metricsScore -ge $MinimumMetricsScore
+    $measureRun = Invoke-ValidationScript -ScriptPath (Join-Path $PSScriptRoot 'measure-agents.ps1') -TargetPath $Path
+    $metricsScore = Get-ScoreFromOutput -Output $measureRun.Output -Pattern '^- Score:\s+(\d+)\s+/'
+    $metricsPassed = $measureRun.ExitCode -eq 0 -and $null -ne $metricsScore -and $metricsScore -ge $MinimumMetricsScore
     Add-CheckResult -Results $results -Name "Metrics score floor" -Passed $metricsPassed -Message "score: $metricsScore / 100, floor: $MinimumMetricsScore"
 
-    $evaluationOutput = Invoke-ValidationScript -ScriptPath ".\scripts\evaluate-agents.ps1" -TargetPath $Path
-    $harnessScore = Get-ScoreFromOutput -Output $evaluationOutput -Pattern '^- Overall:\s+(\d+)\s+/'
-    $harnessPassed = $null -ne $harnessScore -and $harnessScore -ge $MinimumHarnessScore
+    $evaluationRun = Invoke-ValidationScript -ScriptPath (Join-Path $PSScriptRoot 'evaluate-agents.ps1') -TargetPath $Path -ModelProfilePath $ProfilePath
+    $harnessScore = Get-ScoreFromOutput -Output $evaluationRun.Output -Pattern '^- Overall:\s+(\d+)\s+/'
+    $harnessPassed = $evaluationRun.ExitCode -eq 0 -and $null -ne $harnessScore -and $harnessScore -ge $MinimumHarnessScore
     Add-CheckResult -Results $results -Name "Harness score floor" -Passed $harnessPassed -Message "score: $harnessScore / 100, floor: $MinimumHarnessScore"
 } else {
     Add-CheckResult -Results $results -Name "Script score checks" -Passed $true -Message "skipped by -SkipScriptRuns"

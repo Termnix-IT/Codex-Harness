@@ -1,15 +1,21 @@
-param(
+﻿param(
     [Parameter(Mandatory = $false)]
-    [string]$Path = "AGENTSExample.md",
+    [string]$Path = (Join-Path (Split-Path $PSScriptRoot -Parent) 'AGENTSExample.md'),
 
     [Parameter(Mandatory = $false)]
     [string]$BeforePath,
 
     [Parameter(Mandatory = $false)]
-    [string]$AfterPath
+    [string]$AfterPath,
+
+    [string]$ProfilePath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'benchmarks/model-profile.json'),
+
+    [switch]$AsJson
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'harness-profile.ps1')
+$modelProfile = Get-HarnessProfile -ProfilePath $ProfilePath
 
 function New-StringList {
     return New-Object System.Collections.Generic.List[string]
@@ -77,33 +83,17 @@ function Get-RuleHits {
 function Get-DuplicationGroups {
     param([string[]]$Items)
 
-    $groups = @(
-        @{
-            Name = "small focused changes"
-            Pattern = '(?i)\b(small|minimal|focused|narrow|broad|rewrite|diff)\b'
-        },
-        @{
-            Name = "respect existing work"
-            Pattern = '(?i)\b(existing|convention|structure|pattern|revert|user-owned)\b'
-        },
-        @{
-            Name = "safety and secrets"
-            Pattern = '(?i)\b(secret|token|password|private key|\.env|destructive|public repository)\b'
-        },
-        @{
-            Name = "validation"
-            Pattern = '(?i)\b(validate|validation|test|run|feasible|representative)\b'
-        }
-    )
-
+    # Shared vocabulary is not duplication. Only normalized identical rules are scored here.
+    $groups = @($Items | Group-Object -Property {
+        ([regex]::Replace($_, '\s+', ' ')).Trim().TrimEnd([char[]]'.。').ToLowerInvariant()
+    })
     $results = @()
     foreach ($group in $groups) {
-        $matches = @($Items | Where-Object { $_ -match $group.Pattern })
-        if ($matches.Count -gt 2) {
+        if ($group.Count -gt 1) {
             $results += [pscustomobject]@{
                 Name = $group.Name
-                Count = $matches.Count
-                Items = $matches
+                Count = $group.Count
+                Items = @($group.Group)
             }
         }
     }
@@ -147,6 +137,27 @@ function Get-ConflictRisks {
     return @($risks)
 }
 
+function Get-AutonomyRisks {
+    param([string[]]$Items)
+
+    $rules = @(
+        @{ Name = 'unconditional approval'; Pattern = '(?i)^(always\s+(ask|confirm)|before\s+(every|any)\s+(action|change|edit).*(ask|confirm))\b'; Recommendation = 'Define approval boundaries and reuse existing authorization' },
+        @{ Name = 'unconditional context loading'; Pattern = '(?i)^before\s+(changing files|(every|any)\s+(edit|change)).*\b(read|inspect|review)\b'; Recommendation = 'Read relevant context and reuse confirmed findings' },
+        @{ Name = 'unconditional full testing'; Pattern = '(?i)^always\s+(run|execute)\b.*\b(test|tests|suite)\b'; Recommendation = 'Calibrate validation to the change and required checks' },
+        @{ Name = 'unconditional delegation'; Pattern = '(?i)^always\b.*\b(delegate|sub-agents?|subagents?)\b'; Recommendation = 'Delegate independent bounded work when worthwhile' },
+        @{ Name = 'unconditional Git approval'; Pattern = '(?i)\bdo not stage, commit, or push unless the user explicitly asks\b'; Recommendation = 'Express the approved commit and push conditions' }
+    )
+    $hits = @(Get-RuleHits -Items $Items -Rules $rules)
+    return @($hits | Where-Object {
+        if ($_.Name -ne 'unconditional Git approval' -and $_.Text -match '(?i)\b(when|if|unless)\b') { return $false }
+        if ($_.Name -eq 'unconditional approval' -and
+            $_.Text -match '(?i)\b(before|for)\b.*\b(destructive|force|shared|protected|default|main|deploy|deployment|publication|release|delete|deleting|amend|rewriting|outside|beyond)\b') { return $false }
+        if ($_.Name -eq 'unconditional full testing' -and
+            $_.Text -match '(?i)\b(affected|relevant|appropriate|required)\b') { return $false }
+        return $true
+    })
+}
+
 function Get-AgentsEvaluation {
     param([string]$TargetPath)
 
@@ -154,7 +165,10 @@ function Get-AgentsEvaluation {
         throw "AGENTS file does not exist: $TargetPath"
     }
 
-    $content = Get-Content -LiteralPath $TargetPath -Raw
+    $content = Get-Content -LiteralPath $TargetPath -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($content)) {
+        throw "AGENTS file is empty: $TargetPath"
+    }
     $lines = @($content -split "`r?`n")
     $nonEmptyLines = @($lines | Where-Object { $_.Trim().Length -gt 0 })
     $sections = @($lines | Where-Object { $_ -match '^##\s+' })
@@ -169,7 +183,10 @@ function Get-AgentsEvaluation {
         $japaneseCharRatio = 0
     }
 
-    $actionWords = @($bullets | Where-Object { $_ -match '^(?i)(Do not|Do|Prefer|Before|After|When|Ask|State|Run|Use|Keep|Treat|Write|Switch|Add|Make|Explain|Separate)\b' })
+    $actionWords = @($bullets | Where-Object {
+        $_ -match '^(?i)(Do not|Do|Prefer|Before|After|When|Ask|State|Run|Use|Keep|Treat|Write|Switch|Add|Make|Explain|Separate|Read|Complete|Stage|Push|Report|Unless|Follow)\b' -or
+        $_ -match '(する|しない|ください|保つ|使う|従う)[。.]?$'
+    })
 
     $vagueRules = @(
         @{ Name = "vague quality wording"; Pattern = '(?i)\b(make it better|be careful|improve quality|do it nicely|good quality|as appropriate|where possible|best effort)\b'; Recommendation = "Rewrite for clarity" }
@@ -178,7 +195,7 @@ function Get-AgentsEvaluation {
         @{ Name = "task-specific or artifact-specific wording"; Pattern = '(?i)\b(portfolio|network diagram|diagram\.svg|outputs/|screenshots/|release checklist|README maintenance|UI review|specific section structure)\b'; Recommendation = "Move to Skill or repo AGENTS.md" }
     )
     $skillRules = @(
-        @{ Name = "workflow-like instruction"; Pattern = '(?i)\b(workflow|checklist|step-by-step|release|investigation|debugging flow|UI review|diagram generation|maintenance workflow)\b'; Recommendation = "Move to Skill" }
+        @{ Name = "workflow-like instruction"; Pattern = '(?i)\b(checklist|step-by-step|debugging flow|UI review|diagram generation|maintenance workflow)\b'; Recommendation = "Move to Skill" }
     )
     $repoRules = @(
         @{ Name = "repository-specific instruction"; Pattern = '(?i)\b(this repository|repo-specific|project structure|directory structure|templates/|skills/|benchmarks/|scripts/|outputs/|source candidate)\b'; Recommendation = "Move to repo AGENTS.md" }
@@ -190,35 +207,25 @@ function Get-AgentsEvaluation {
     $repoHits = Get-RuleHits -Items $bullets -Rules $repoRules
     $duplicationGroups = Get-DuplicationGroups -Items $bullets
     $conflictRisks = Get-ConflictRisks -Content $content
+    $autonomyRisks = Get-AutonomyRisks -Items $bullets
 
-    $tokenEfficiency = 20
+    $contextEconomy = 15
     if ($nonEmptyLines.Count -gt 120) {
-        $tokenEfficiency -= [Math]::Min(8, [Math]::Ceiling(($nonEmptyLines.Count - 120) / 10))
+        $contextEconomy -= [Math]::Min(8, [Math]::Ceiling(($nonEmptyLines.Count - 120) / 10))
     } elseif ($nonEmptyLines.Count -gt 80) {
-        $tokenEfficiency -= 3
+        $contextEconomy -= 3
     }
     if ($charCount -gt 12000) {
-        $tokenEfficiency -= 6
+        $contextEconomy -= 6
     } elseif ($charCount -gt 8000) {
-        $tokenEfficiency -= 3
-    }
-    if ($longLines.Count -gt 0) {
-        $tokenEfficiency -= [Math]::Min(4, $longLines.Count)
-    }
-    if ($japaneseCharRatio -gt 30) {
-        $tokenEfficiency -= 4
-    } elseif ($japaneseCharRatio -gt 10) {
-        $tokenEfficiency -= 2
+        $contextEconomy -= 3
     }
     if ($duplicationGroups.Count -gt 0) {
-        $tokenEfficiency -= [Math]::Min(3, $duplicationGroups.Count)
+        $contextEconomy -= [Math]::Min(3, $duplicationGroups.Count)
     }
 
     $clarity = 15
     $clarity -= [Math]::Min(5, $vagueHits.Count * 2)
-    if ($longLines.Count -gt 0) {
-        $clarity -= [Math]::Min(3, $longLines.Count)
-    }
 
     $actionability = 15
     if ($bullets.Count -eq 0) {
@@ -233,7 +240,7 @@ function Get-AgentsEvaluation {
     }
     $actionability -= [Math]::Min(3, $vagueHits.Count)
 
-    $globalRelevance = 20
+    $globalRelevance = 15
     $globalRelevance -= [Math]::Min(8, $taskSpecificHits.Count * 3)
     $globalRelevance -= [Math]::Min(6, $repoHits.Count * 2)
     if ($sections.Count -gt 10) {
@@ -247,13 +254,14 @@ function Get-AgentsEvaluation {
     $separationFitness -= [Math]::Min(4, $repoHits.Count)
 
     $scores = [ordered]@{
-        "Token Efficiency" = [Math]::Max(0, $tokenEfficiency)
+        "Context Economy" = [Math]::Max(0, $contextEconomy)
         "Clarity" = [Math]::Max(0, $clarity)
         "Actionability" = [Math]::Max(0, $actionability)
         "Global Relevance" = [Math]::Max(0, $globalRelevance)
         "Duplication" = [Math]::Max(0, $duplication)
         "Conflict Risk" = [Math]::Max(0, $conflictRisk)
         "Separation Fitness" = [Math]::Max(0, $separationFitness)
+        "Autonomy Calibration" = [Math]::Max(0, 10 - [Math]::Min(10, $autonomyRisks.Count * 2))
     }
 
     $overall = 0
@@ -262,6 +270,12 @@ function Get-AgentsEvaluation {
     }
 
     $warnings = New-StringList
+    if (-not $modelProfile.IsCurrent) {
+        $warnings.Add('Official guidance review is due; verify the sources before updating reviewed_on.')
+    }
+    if ($autonomyRisks.Count -gt 0) {
+        $warnings.Add("$($autonomyRisks.Count) unconditional workflow rule(s) may cause unnecessary pauses or work.")
+    }
     if ($nonEmptyLines.Count -gt 120) {
         $warnings.Add("Global AGENTS.md is longer than 120 non-empty lines.")
     }
@@ -286,7 +300,7 @@ function Get-AgentsEvaluation {
         $warnings.Add("$($conflictRisks.Count) conflict risk(s) found.")
     }
     if ($duplicationGroups.Count -gt 0) {
-        $warnings.Add("$($duplicationGroups.Count) possible duplicate rule group(s) found.")
+        $warnings.Add("$($duplicationGroups.Count) normalized duplicate rule group(s) found.")
     }
 
     $keep = New-StringList
@@ -311,7 +325,7 @@ function Get-AgentsEvaluation {
         Add-Unique -List $rewrite -Value $hit.Text
     }
     foreach ($group in $duplicationGroups) {
-        Add-Unique -List $merge -Value "$($group.Name): $($group.Count) similar rule(s)"
+        Add-Unique -List $merge -Value "$($group.Count) copies: $($group.Name)"
     }
     if ($duplicationGroups.Count -gt 0) {
         Add-Unique -List $remove -Value "Duplicated background or repeated rule wording after merge review."
@@ -319,12 +333,15 @@ function Get-AgentsEvaluation {
 
     return [pscustomobject]@{
         Path = $TargetPath
+        RubricVersion = '2026-09-gpt6'
+        Profile = $modelProfile
         Overall = [int]$overall
-        QualityGate = Get-QualityGate -Score $overall
+        QualityGate = $(if ($modelProfile.IsCurrent) { Get-QualityGate -Score $overall } else { 'Review due' })
         Scores = $scores
         Metrics = [pscustomobject]@{
             NonEmptyLines = $nonEmptyLines.Count
             Characters = $charCount
+            Utf8Bytes = [System.Text.Encoding]::UTF8.GetByteCount($content)
             JapaneseCharacterRatio = $japaneseCharRatio
             Sections = $sections.Count
             BulletItems = $bullets.Count
@@ -338,6 +355,7 @@ function Get-AgentsEvaluation {
         RepoHits = @($repoHits)
         DuplicationGroups = @($duplicationGroups)
         ConflictRisks = @($conflictRisks)
+        AutonomyRisks = @($autonomyRisks)
         Classification = [pscustomobject]@{
             Keep = @($keep)
             MoveToRepoAgents = @($moveRepo)
@@ -378,10 +396,13 @@ function Write-Evaluation {
     Write-Host "## AGENTS Harness Score"
     Write-Host ""
     Write-Host "- Path: $($Evaluation.Path)"
+    Write-Host "- Rubric version: $($Evaluation.RubricVersion)"
+    Write-HarnessProfile -Profile $Evaluation.Profile
     Write-Host "- Overall: $($Evaluation.Overall) / 100"
     Write-Host "- Quality Gate: $($Evaluation.QualityGate)"
     Write-Host "- Non-empty lines: $($Evaluation.Metrics.NonEmptyLines)"
     Write-Host "- Characters: $($Evaluation.Metrics.Characters)"
+    Write-Host "- UTF-8 bytes: $($Evaluation.Metrics.Utf8Bytes)"
     Write-Host "- Japanese character ratio: $($Evaluation.Metrics.JapaneseCharacterRatio)%"
     Write-Host "- Sections: $($Evaluation.Metrics.Sections)"
     Write-Host "- Bullet items: $($Evaluation.Metrics.BulletItems)"
@@ -392,13 +413,14 @@ function Write-Evaluation {
     Write-Host "### Breakdown"
     foreach ($key in $Evaluation.Scores.Keys) {
         $max = switch ($key) {
-            "Token Efficiency" { 20 }
+            "Context Economy" { 15 }
             "Clarity" { 15 }
             "Actionability" { 15 }
-            "Global Relevance" { 20 }
+            "Global Relevance" { 15 }
             "Duplication" { 10 }
             "Conflict Risk" { 10 }
             "Separation Fitness" { 10 }
+            "Autonomy Calibration" { 10 }
         }
         Write-Host "- ${key}: $($Evaluation.Scores[$key]) / $max"
     }
@@ -406,6 +428,9 @@ function Write-Evaluation {
     Write-ListSection -Title "Warnings" -Items $Evaluation.Warnings
 
     $recommendations = New-StringList
+    foreach ($risk in $Evaluation.AutonomyRisks) {
+        Add-Unique -List $recommendations -Value $risk.Recommendation
+    }
     if ($Evaluation.TaskSpecificHits.Count -gt 0) {
         $recommendations.Add("Review task-specific rules and move them to repo AGENTS.md or a Skill.")
     }
@@ -444,6 +469,8 @@ function Write-DiffEvaluation {
 
     Write-Host "## AGENTS Diff Evaluation"
     Write-Host ""
+    Write-Host "- Rubric version: $($After.RubricVersion)"
+    Write-HarnessProfile -Profile $After.Profile
     Write-Host "- Before: $($Before.Overall) / 100 ($($Before.QualityGate))"
     Write-Host "- After: $($After.Overall) / 100 ($($After.QualityGate))"
     Write-Host "- Score changed: $($After.Overall - $Before.Overall)"
@@ -463,6 +490,7 @@ function Write-DiffEvaluation {
     $skillDelta = $After.SkillHits.Count - $Before.SkillHits.Count
     $repoDelta = $After.RepoHits.Count - $Before.RepoHits.Count
     $conflictDelta = $After.ConflictRisks.Count - $Before.ConflictRisks.Count
+    $autonomyDelta = $After.AutonomyRisks.Count - $Before.AutonomyRisks.Count
 
     if ($lineDelta -ne 0) {
         $reasons.Add("Non-empty line count changed by $lineDelta.")
@@ -485,6 +513,9 @@ function Write-DiffEvaluation {
     if ($conflictDelta -ne 0) {
         $reasons.Add("Conflict risks changed by $conflictDelta.")
     }
+    if ($autonomyDelta -ne 0) {
+        $reasons.Add("Unconditional workflow rules changed by $autonomyDelta.")
+    }
     if ($reasons.Count -eq 0) {
         $reasons.Add("No rule-based reason changed, but category weighting may have shifted.")
     }
@@ -499,8 +530,12 @@ if ($BeforePath -or $AfterPath) {
 
     $beforeEvaluation = Get-AgentsEvaluation -TargetPath $BeforePath
     $afterEvaluation = Get-AgentsEvaluation -TargetPath $AfterPath
-    Write-DiffEvaluation -Before $beforeEvaluation -After $afterEvaluation
+    if ($AsJson) {
+        [pscustomobject]@{ Before = $beforeEvaluation; After = $afterEvaluation; ScoreChange = $afterEvaluation.Overall - $beforeEvaluation.Overall } | ConvertTo-Json -Depth 10
+    } else {
+        Write-DiffEvaluation -Before $beforeEvaluation -After $afterEvaluation
+    }
 } else {
     $evaluation = Get-AgentsEvaluation -TargetPath $Path
-    Write-Evaluation -Evaluation $evaluation
+    if ($AsJson) { $evaluation | ConvertTo-Json -Depth 10 } else { Write-Evaluation -Evaluation $evaluation }
 }
