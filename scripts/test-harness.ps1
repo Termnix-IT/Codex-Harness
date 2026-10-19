@@ -46,10 +46,11 @@ function Invoke-Evaluation {
 function Invoke-ChildScript {
     param([string]$ScriptName, [string[]]$Arguments)
     $powerShellExe = (Get-Process -Id $PID).Path
+    $scriptPath = if ([System.IO.Path]::IsPathRooted($ScriptName)) { $ScriptName } else { Join-Path $PSScriptRoot $ScriptName }
     $savedPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        $output = @(& $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $ScriptName) @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $output = @(& $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $scriptPath @Arguments 2>&1 | ForEach-Object { [string]$_ })
         return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = ($output -join "`n") }
     } finally {
         $ErrorActionPreference = $savedPreference
@@ -86,6 +87,17 @@ try {
 
     # Evaluation fixtures use today's review date so regression tests remain usable when the real review is due.
     $freshPath = New-ProfileFixture 'fresh.json' { param($p) $p.reviewed_on = (Get-Date).ToString('yyyy-MM-dd') }
+    $validInstructionsPath = Write-Fixture 'valid-instructions.txt' @'
+# Fixture
+- 日本語で回答する。
+- 破壊的な操作の前に承認を確認する。
+- 既存の構成と変更を保持する。
+- 小さな差分にまとめる。
+- API keyや機密情報を出力しない。
+- WindowsではPowerShellを使用する。
+- 不確実な内容は仮定として示す。
+- 変更に応じた検証を実行する。
+'@
     $scopedPath = Write-Fixture 'scoped.txt' @'
 # Fixture
 - Use a task-specific branch.
@@ -177,11 +189,37 @@ try {
     $invalidRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', $scopedPath, '-ProfilePath', $badSchema, '-SkipScriptRuns')
     Assert-True ($invalidRun.ExitCode -ne 0 -and $invalidRun.Text -match 'Fail: Model profile validity') 'Invalid profiles fail validation.'
     $failedChildRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', $scopedPath, '-ProfilePath', $badSchema)
-    Assert-True ($failedChildRun.ExitCode -ne 0 -and $failedChildRun.Text -match 'Fail: Harness score floor') 'A failed evaluator cannot pass by emitting other output.'
+    Assert-True ($failedChildRun.ExitCode -ne 0 -and $failedChildRun.Text -match 'Fail: Harness score check') 'A failed evaluator remains a failure rather than a score warning.'
     $missingRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', (Join-Path $tempRoot 'missing.txt'), '-ProfilePath', $freshPath, '-SkipScriptRuns')
     Assert-True ($missingRun.ExitCode -ne 0) 'Missing instruction targets fail validation.'
     $metricsRun = Invoke-ChildScript 'measure-agents.ps1' @('-Path', $japanesePath)
     Assert-True ($metricsRun.ExitCode -eq 0 -and $metricsRun.Text -notmatch 'High Japanese|Too short|Few sections') 'Metrics do not penalize language, short files, or few headings.'
+
+    $lowScorePath = Write-Fixture 'low-score.txt' ((1..130 | ForEach-Object { '- Always ask before every edit.' }) -join "`n")
+    $lowScoreRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', $lowScorePath, '-ProfilePath', $freshPath, '-MinimumMetricsScore', '100', '-MinimumHarnessScore', '100')
+    Assert-True ($lowScoreRun.ExitCode -eq 0 -and $lowScoreRun.Text -match 'Failed checks: 0') 'Low static scores alone do not fail validation.'
+    Assert-True ($lowScoreRun.Text -match 'Warning: Metrics score check' -and $lowScoreRun.Text -match 'Warning: Harness score check' -and $lowScoreRun.Text -match 'Warnings: 2') 'Both low scores remain visible as separately counted warnings.'
+    $emptyRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', $emptyPath, '-ProfilePath', $freshPath)
+    Assert-True ($emptyRun.ExitCode -ne 0 -and $emptyRun.Text -match 'Fail: Metrics score check' -and $emptyRun.Text -match 'Fail: Harness score check') 'Empty input still fails both evaluation scripts.'
+
+    # Exercise invalid child output in an isolated harness without changing repository scripts.
+    $stubRoot = Join-Path $tempRoot 'stub-harness'
+    $stubScripts = Join-Path $stubRoot 'scripts'
+    $null = New-Item -ItemType Directory -Path $stubScripts -Force
+    foreach ($file in @('README.md', 'AGENTS.md', 'AGENTSExample.md')) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination $stubRoot
+    }
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'benchmarks') -Destination $stubRoot -Recurse
+    Copy-Item -Path (Join-Path $repoRoot 'scripts/*.ps1') -Destination $stubScripts
+    foreach ($scenario in @(
+        @{ Name = 'missing score'; Text = 'Write-Host "No score"; exit 0' },
+        @{ Name = 'nonzero exit with valid score'; Text = 'Write-Host "- Score: 100 / 100"; exit 1' },
+        @{ Name = 'out-of-range score'; Text = 'Write-Host "- Score: 101 / 100"; exit 0' }
+    )) {
+        [System.IO.File]::WriteAllText((Join-Path $stubScripts 'measure-agents.ps1'), $scenario.Text)
+        $stubRun = Invoke-ChildScript (Join-Path $stubScripts 'validate-harness.ps1') @('-Path', $validInstructionsPath, '-ProfilePath', $freshPath)
+        Assert-True ($stubRun.ExitCode -ne 0 -and $stubRun.Text -match 'Failed checks: 1' -and $stubRun.Text -match 'Fail: Metrics score check' -and $stubRun.Text -notmatch 'Warning: Metrics score check') "Child $($scenario.Name) is a failure, not a warning."
+    }
 
     $diffJson = & (Join-Path $PSScriptRoot 'evaluate-agents.ps1') -BeforePath $unconditionalPath -AfterPath $scopedPath -ProfilePath $freshPath -AsJson
     $diff = $diffJson | ConvertFrom-Json
@@ -191,8 +229,8 @@ try {
     # Test script location independence without depending on the caller's working directory.
     Push-Location $tempRoot
     try {
-        $outsideRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', (Join-Path $repoRoot 'AGENTSExample.md'), '-ProfilePath', $freshPath)
-        Assert-True ($outsideRun.ExitCode -eq 0) 'Harness validation resolves its files when called outside the repository.'
+        $outsideRun = Invoke-ChildScript 'validate-harness.ps1' @('-Path', $validInstructionsPath, '-ProfilePath', $freshPath)
+        Assert-True ($outsideRun.ExitCode -eq 0 -and $outsideRun.Text -match 'Warnings: 0') 'Harness validation resolves its files outside the repository using a fixed valid fixture.'
     } finally {
         Pop-Location
     }

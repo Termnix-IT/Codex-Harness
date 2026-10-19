@@ -25,9 +25,9 @@
 .\scripts\validate-harness.ps1 -Path .\AGENTSExample.md
 ```
 
-このscriptは、主要ファイルの存在、READMEの説明、model profileの有効性と確認期限、既存評価scriptの正常終了と最低score floorを確認します。
+このscriptは、主要ファイルの存在、READMEの説明、model profileの有効性と確認期限、既存評価scriptの正常終了とスコア取得を確認します。不備は `Fail`、静的スコアのしきい値未達は `Warning` として件数を別々に表示し、`Fail` がある場合だけ終了コード1を返します。
 
-必要に応じてfloorを変更して確認します。
+警告がある場合は警告付き成功として報告し、原因・内容・実運用への影響を確認します。必要に応じて警告しきい値（0–100、既定70）を指定します。既存パラメーター名は維持しています。
 
 ```powershell
 .\scripts\validate-harness.ps1 -Path .\AGENTSExample.md -MinimumMetricsScore 70 -MinimumHarnessScore 70
@@ -44,12 +44,17 @@
 | `benchmarks/HARNESS.checklist.md` がrepo全体の手動確認に使えるか |  |  |
 | `scripts/measure-agents.ps1` が過密化やcoverage不足を検出できるか |  |  |
 | `scripts/evaluate-agents.ps1` がglobal / repo / skillの分離崩れを検出できるか |  |  |
-| `scripts/validate-harness.ps1` が主要ファイル欠落や明らかな低scoreを検出できるか |  |  |
+| `scripts/validate-harness.ps1` が主要ファイル欠落・profile不正・期限超過・評価処理の異常を失敗として検出できるか |  |  |
+| 静的スコアの低下を警告として表示し、失敗件数と区別して原因・実運用への影響を確認できるか |  |  |
 | `benchmarks/model-profile.json` が対象モデル、reasoning effort、公式資料の根拠範囲と確認日を記録しているか |  |  |
+| 対象の `gpt-6-sol` と新しい `gpt-6.1-sol`、APIの対応effortとクライアントの `Ultra`・利用可否を区別しているか |  |  |
 | モデル変更や確認期限到達時に、日付だけを変更せず公式資料と評価前提を見直すか |  |  |
 | Astraで観測された特性をSolの実測結果と混同していないか |  |  |
+| 指示の探索順・階層の優先順位と、32 KiBの合算／各ファイルという公式資料間の相違を区別し、実際の読込指示を確認するか |  |  |
+| ローカルCodexとWorkの委譲条件、モデル・effortの継承と上書き、親のsandbox・承認設定の継承を混同していないか |  |  |
 | 静的scoreと行動評価を分け、未実施ケースを `Not run` として扱うか |  |  |
-| 回帰テストが条件付きGitルールの誤検知、確認期限、不正profile、重複検出を確認するか |  |  |
+| 回帰テストが条件付きGitルールの誤検知、確認期限、不正profile、重複検出、低スコア警告と実行異常の区別を確認するか |  |  |
+| 呼出元ディレクトリの回帰テストが固定データを使い、実際の指示候補の点数に依存しないか |  |  |
 | READMEのDirectory Structureが実ファイルと概ね一致しているか |  |  |
 | READMEのUsageが現在のscriptとchecklistに追従しているか |  |  |
 | 自動scoreを絶対的な品質判定として扱わない注意が書かれているか |  |  |
@@ -61,5 +66,5 @@
 
 - Strengths:
 - Needs review:
-- Missing floor checks:
+- Missing validation checks:
 - Recommended edits:

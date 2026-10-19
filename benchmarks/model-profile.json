@@ -2,28 +2,33 @@
   "schema_version": 1,
   "target_model": "gpt-6-sol",
   "reasoning_effort": "medium",
-  "reviewed_on": "2026-09-29",
+  "reviewed_on": "2026-10-19",
   "review_interval_days": 30,
   "sources": [
     {
       "name": "GPT-6 Sol",
       "url": "https://developers.openai.com/api/docs/models/gpt-6-sol",
-      "scope": "Model identifier and supported reasoning efforts."
+      "scope": "API model identifier gpt-6-sol; reasoning.effort supports none, low, medium (default), high, xhigh, and max. Does not establish client intelligence levels or account availability; gpt-6.1-sol is a separate model."
     },
     {
       "name": "GPT-6 model guidance",
       "url": "https://developers.openai.com/api/docs/guides/latest-model",
-      "scope": "Family guidance; behavioral observations primarily concern Astra and require evaluation on Sol."
+      "scope": "Current family guidance highlights GPT-6.1 Sol, not the pinned GPT-6 Sol. Prompting advice addresses behavior observed with Astra and requires evaluation on the selected Sol model and workload; it is not a Sol behavior measurement."
     },
     {
       "name": "AGENTS.md discovery",
       "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
-      "scope": "Global and project instruction precedence and discovery limits."
+      "scope": "Startup discovery from CODEX_HOME and project root to CWD; override, AGENTS.md, then configured fallback priority, at most one file per directory, with deeper guidance taking precedence. Describes project_doc_max_bytes as a combined limit (default 32 KiB); Advanced Configuration uses different per-file wording, so actual client loading must be checked."
+    },
+    {
+      "name": "Project instructions discovery (Advanced Configuration)",
+      "url": "https://learn.chatgpt.com/docs/config-file/config-advanced#project-instructions-discovery",
+      "scope": "Describes project_doc_max_bytes as an amount read per AGENTS.md file, unlike the combined-limit wording in the AGENTS.md guide. Records this documentation discrepancy without asserting a uniform client implementation or equating the limit with the model context window."
     },
     {
       "name": "Subagents",
       "url": "https://learn.chatgpt.com/docs/agent-configuration/subagents",
-      "scope": "Delegation triggers, independent scopes, and token cost."
+      "scope": "Local Codex delegates on direct requests or applicable AGENTS.md/skill instructions; Work normally requires explicit requests, while eligible Ultra supports proactive delegation. Covers independent scopes, extra token use, default parent model/effort inheritance and configured overrides, and inherited sandbox/approval settings; read-only instructions do not create a separate sandbox. Does not establish API effort support for gpt-6-sol."
     }
   ]
 }
