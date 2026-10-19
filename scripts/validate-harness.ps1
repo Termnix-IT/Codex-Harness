@@ -5,9 +5,11 @@
     [string]$ProfilePath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'benchmarks/model-profile.json'),
 
     [Parameter(Mandatory = $false)]
+    [ValidateRange(0, 100)]
     [int]$MinimumMetricsScore = 70,
 
     [Parameter(Mandatory = $false)]
+    [ValidateRange(0, 100)]
     [int]$MinimumHarnessScore = 70,
 
     [Parameter(Mandatory = $false)]
@@ -27,13 +29,15 @@ function Add-CheckResult {
         [System.Collections.Generic.List[object]]$Results,
         [string]$Name,
         [bool]$Passed,
-        [string]$Message
+        [string]$Message,
+        [switch]$Warning
     )
 
     $Results.Add([pscustomobject]@{
         Name = $Name
         Passed = $Passed
         Message = $Message
+        IsWarning = [bool]$Warning
     })
 }
 
@@ -50,6 +54,26 @@ function Get-ScoreFromOutput {
     }
 
     return $null
+}
+
+function Add-ScoreCheck {
+    param(
+        [System.Collections.Generic.List[object]]$Results,
+        [string]$Name,
+        [object]$Run,
+        [string]$Pattern,
+        [int]$Threshold
+    )
+
+    $score = Get-ScoreFromOutput -Output $Run.Output -Pattern $Pattern
+    $valid = $Run.ExitCode -eq 0 -and $null -ne $score -and $score -ge 0 -and $score -le 100
+    $warning = $valid -and $score -lt $Threshold
+    $message = if ($valid) {
+        "score: $score / 100, warning threshold: $Threshold"
+    } else {
+        "evaluation failed or score missing/invalid (exit code: $($Run.ExitCode), score: $score)"
+    }
+    Add-CheckResult -Results $Results -Name $Name -Passed $valid -Warning:$warning -Message $message
 }
 
 function Invoke-ValidationScript {
@@ -99,7 +123,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot 'README.md') -PathType Leaf) {
 }
 
 $readmeChecks = @(
-    @{ Name = "README explains floor-check purpose"; Pattern = "最低限|floor|warning light|警告" },
+    @{ Name = "README explains validation purpose"; Pattern = "最低限|warning light|警告" },
     @{ Name = "README documents validate-harness.ps1"; Pattern = "validate-harness\.ps1" },
     @{ Name = "README documents HARNESS checklist"; Pattern = "HARNESS\.checklist\.md" },
     @{ Name = "README keeps manual review expectation"; Pattern = "手動|manual" },
@@ -123,30 +147,28 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     Add-CheckResult -Results $results -Name "Target AGENTS file exists" -Passed $false -Message "missing: $Path"
 } elseif (-not $SkipScriptRuns) {
     $measureRun = Invoke-ValidationScript -ScriptPath (Join-Path $PSScriptRoot 'measure-agents.ps1') -TargetPath $Path
-    $metricsScore = Get-ScoreFromOutput -Output $measureRun.Output -Pattern '^- Score:\s+(\d+)\s+/'
-    $metricsPassed = $measureRun.ExitCode -eq 0 -and $null -ne $metricsScore -and $metricsScore -ge $MinimumMetricsScore
-    Add-CheckResult -Results $results -Name "Metrics score floor" -Passed $metricsPassed -Message "score: $metricsScore / 100, floor: $MinimumMetricsScore"
+    Add-ScoreCheck -Results $results -Name 'Metrics score check' -Run $measureRun -Pattern '^- Score:\s+(\d+)\s+/' -Threshold $MinimumMetricsScore
 
     $evaluationRun = Invoke-ValidationScript -ScriptPath (Join-Path $PSScriptRoot 'evaluate-agents.ps1') -TargetPath $Path -ModelProfilePath $ProfilePath
-    $harnessScore = Get-ScoreFromOutput -Output $evaluationRun.Output -Pattern '^- Overall:\s+(\d+)\s+/'
-    $harnessPassed = $evaluationRun.ExitCode -eq 0 -and $null -ne $harnessScore -and $harnessScore -ge $MinimumHarnessScore
-    Add-CheckResult -Results $results -Name "Harness score floor" -Passed $harnessPassed -Message "score: $harnessScore / 100, floor: $MinimumHarnessScore"
+    Add-ScoreCheck -Results $results -Name 'Harness score check' -Run $evaluationRun -Pattern '^- Overall:\s+(\d+)\s+/' -Threshold $MinimumHarnessScore
 } else {
     Add-CheckResult -Results $results -Name "Script score checks" -Passed $true -Message "skipped by -SkipScriptRuns"
 }
 
 $failures = @($results | Where-Object { -not $_.Passed })
+$warnings = @($results | Where-Object { $_.IsWarning })
 
 Write-Host "## Harness Validation"
 Write-Host ""
 Write-Host "- Target: $Path"
 Write-Host "- Failed checks: $($failures.Count)"
+Write-Host "- Warnings: $($warnings.Count)"
 Write-Host "- Total checks: $($results.Count)"
 Write-Host ""
 Write-Host "### Checks"
 
 foreach ($result in $results) {
-    $status = if ($result.Passed) { "Pass" } else { "Fail" }
+    $status = if (-not $result.Passed) { "Fail" } elseif ($result.IsWarning) { "Warning" } else { "Pass" }
     Write-Host "- ${status}: $($result.Name) - $($result.Message)"
 }
 

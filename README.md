@@ -74,9 +74,9 @@ git show HEAD:AGENTSExample.md | Set-Content -LiteralPath $beforePath -Encoding 
 .\scripts\validate-harness.ps1 -Path .\AGENTSExample.md
 ```
 
-主要ファイル、READMEの説明、モデル確認記録の有効性と確認期限、評価スクリプトの正常終了を検査します。分量評価と内容評価の最低基準は、それぞれ既定で70点です。`-SkipScriptRuns` でも確認期限を検査します。
+主要ファイル、READMEの説明、モデル確認記録の有効性と確認期限、評価スクリプトの正常終了とスコア取得を検査します。これらに不備がある場合は `Fail` として終了コード1を返します。`-SkipScriptRuns` でも確認期限を検査します。
 
-必要なルールを保持すると分量評価が基準を下回ることがあります。検証失敗を隠したり点数のためだけにルールを削ったりせず、原因と内容評価を確認します。検証例外を使う場合は理由とユーザーの承認範囲を確認し、既定の検証が成功したとは報告しません。最低基準を明示して再検証する場合は `-MinimumMetricsScore` と `-MinimumHarnessScore` を使用します。
+分量評価と内容評価は静的な目安のため、既定の70点を下回った場合は `Warning` として件数とスコアを表示し、それだけでは終了コードを失敗にしません。警告がある場合は「警告付き成功」として報告し、原因・内容・実運用への影響を確認します。点数のためだけに必要なルールを削らないでください。既存の `-MinimumMetricsScore` と `-MinimumHarnessScore` は互換性のため名前を維持し、0–100の警告しきい値として扱います。
 
 評価スクリプトやモデル確認記録の検証処理を変更した場合は、回帰テストも実行します。成功済みの検証は、新たな変更・失敗・未解決の懸念がある場合だけ追加または再実行します。
 
@@ -85,7 +85,7 @@ git show HEAD:AGENTSExample.md | Set-Content -LiteralPath $beforePath -Encoding 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-harness.ps1
 ```
 
-スクリプトは日本語の正規表現や検証データを扱うため、Windows PowerShell 5.1でも読めるUTF-8 BOM付きで保存します。回帰テストはPowerShell 7と5.1で確認できます。
+スクリプトは日本語の正規表現や検証データを扱うため、Windows PowerShell 5.1でも読めるUTF-8 BOM付きで保存します。回帰テストはPowerShell 7と5.1で確認できます。呼出元ディレクトリの検証には固定データを使い、指示候補の点数に依存させません。低スコアの警告と評価処理の失敗は別々に検証します。
 
 ## モデルと公式資料の確認
 
@@ -93,7 +93,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-harness.p
 
 再確認間隔はこのリポジトリの運用値として30日です。期限到達時とモデル・Codexの仕様変更時に、公式資料と評価の前提を確認して記録を更新します。日付だけを更新しないでください。期限到達、未来の日付、不正な記録はハーネスの検証で失敗として報告します。
 
-GPT-6ガイドの行動特性の説明は主にAstraの観測に基づくため、Solでの効果は行動評価で確認します。AGENTS.mdの既定の32 KiBは読み込む指示全体の上限で、モデルのcontext windowとは別です。
+評価対象は `gpt-6-sol` / `medium` を維持します。[公式モデルページ](https://developers.openai.com/api/docs/models/gpt-6-sol) が示すAPIのreasoning effortは `none`、`low`、`medium`（既定）、`high`、`xhigh`、`max` です。この一覧はクライアントのintelligence levelやアカウントでの利用可否を保証しません。クライアントの `Ultra` をAPIの対応値として扱わないでください。[GPT-6ガイド](https://developers.openai.com/api/docs/guides/latest-model) が現在紹介する `gpt-6.1-sol` は別モデルです。ガイドの行動特性はAstraの観測に基づくため、対象のSolでの効果は行動評価で確認します。
+
+[AGENTS.mdガイド](https://learn.chatgpt.com/docs/agent-configuration/agents-md) では、起動時に `CODEX_HOME` の指示とプロジェクトルートから作業ディレクトリまでの指示を探索します。各ディレクトリで `AGENTS.override.md`、`AGENTS.md`、設定したfallback名の順に最大1ファイルを選び、深い階層の指示が優先されます。`project_doc_max_bytes` の既定値32 KiBについて、同ガイドは合算上限、[Advanced Configuration](https://learn.chatgpt.com/docs/config-file/config-advanced#project-instructions-discovery) は各ファイルの読込量と説明しており、記述が一致していません。モデルのcontext windowとは区別し、利用クライアントで実際に読み込まれた指示を確認してください。
+
+[Subagentsの公式資料](https://learn.chatgpt.com/docs/agent-configuration/subagents) では、ローカルCodexの委譲は直接の依頼または適用されるAGENTS.md・Skillの指示で開始します。ChatGPT Workは通常明示依頼が必要で、対応アカウントの `Ultra` では自発的な委譲も可能です。独立した範囲の並列処理には利点がありますが、token使用量は増えます。別途設定しなければ親のモデルとreasoning effortを引き継ぎ、sandboxと承認設定も親から継承します。読み取り専用の指示だけで別のsandboxが作られるわけではありません。
 
 静的評価はモデルを呼び出さず、公式資料も毎回取得しません。確認期限内でも外部仕様の変更を自動検知する保証はありません。
 
